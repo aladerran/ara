@@ -15,10 +15,15 @@ void hash_rvv(const int *idx, uint32_t *out, const int N);
 
 
 void cpu_kernel_hash_wrapper(const int N, const int K, const int *data,
-                             const int *kernel_offset, int64_t *out);
+                             const int *kernel_offset, uint32_t *out);
 
 void kernel_hash_cpu(const int *idx, const int *kernel_offset,
-                           uint32_t *out, const int N, const int K, const int B);
+                           uint32_t *out, const int N, const int K);
 
+void rvv_kernel_hash_wrapper(const int N, const int K, const int *data,
+                             const int *kernel_offset, uint32_t *out);
+
+void kernel_hash_rvv(const int *idx, const int *kernel_offset,
+                            uint32_t *out, const int N, const int K);
 
 #endif
