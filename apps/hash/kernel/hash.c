@@ -123,8 +123,8 @@ void rvv_kernel_hash_wrapper(const int N, const int K, const int *data,
         }
 
         for (int k = 0; k < K; ++k) {
-            // Broadcast current kernel_offset values
 
+            // Broadcast current kernel_offset values
             vuint32m1_t vkx = vmv_v_x_u32m1(kernel_offset[k * 3], vl);
             vuint32m1_t vky = vmv_v_x_u32m1(kernel_offset[k * 3 + 1], vl);
             vuint32m1_t vkz = vmv_v_x_u32m1(kernel_offset[k * 3 + 2], vl);
@@ -182,60 +182,37 @@ void kernel_hash_rvv(const int *idx, const int *kernel_offset,
 //     }
 // }
 
+#include "hashmap.h"
 
+void hash_query_cpu(const uint32_t* hash_query, const uint32_t* hash_target,
+                    const uint32_t* idx_target, uint32_t* out, const int n, const int n1) {
+    HashMap hashmap;
+    HashInit(&hashmap); 
 
-/*
-1. Bulk Key Hashing
-The idea here is to compute hash values for a batch of keys in parallel, 
-which could be useful for preprocessing keys before insertion or lookup in the hash table.
+    for (int i = 0; i < n; i++) {
+        HashAdd(&hashmap, hash_target[i], idx_target[i] + 1);
+    }
 
-// Pseudo-code for vectorized hash computation
-void bulkHashComputation(const uint32_t* keys, uint32_t* hashes, size_t n) {
+    for (int i = 0; i < n1; i++) {
+        out[i] = HashGetValue(&hashmap, hash_query[i]);
+    }
+
+}
+
+void hash_query_rvv(const uint32_t* hash_query, const uint32_t* hash_target,
+                    const uint32_t* idx_target, uint32_t* out, const int n, const int n1) {
+    HashMap HashMap_rvv;
+    HashInit_rvv(&HashMap_rvv, n);
     size_t vlmax = vsetvlmax_e32m1();
-    for (size_t i = 0; i < n; i += vlmax) {
+
+    for (size_t i = 0; i < n; i+=vlmax) {
         size_t vl = vsetvl_e32m1(n - i);
-        vuint32m1_t vkeys = vle32_v_u32m1(&keys[i], vl); // Load a batch of keys into a vector register
+        HashAdd_rvv(&HashMap_rvv, hash_target + i, idx_target + i, vl);
+    }
 
-        // Example vectorized hash computation (modulo operation)
-        vuint32m1_t vhashes = vremu_vx_u32m1(vkeys, HASH_TABLE_SIZE, vl);
-
-        vse32_v_u32m1(&hashes[i], vhashes, vl); // Store computed hashes back to memory
+    for (size_t i = 0; i < n1; i+=vlmax) {
+        size_t vl = vsetvl_e32m1(n1 - i);
+        HashGet_rvv(&HashMap_rvv, hash_query + i, vl, out + i);
     }
 }
 
-
-2. Vectorized Preprocessing for Insertion/Lookup
-Before inserting data into the hash table or after retrieving data, 
-we might need to preprocess the data in a way that can benefit from vectorization.
-
-// Pseudo-code for vectorized preprocessing
-void preprocessDataVectorized(uint32_t* data, size_t n) {
-    size_t vlmax = vsetvlmax_e32m1(); 
-    for (size_t i = 0; i < n; i += vlmax) {
-        size_t vl = vsetvl_e32m1(n - i); 
-        vuint32m1_t vdata = vle32_v_u32m1(&data[i], vl); // Load data into vector register
-
-        // Apply some vectorized operation, e.g., an increment to simulate preprocessing
-        vuint32m1_t vprocessed = vadd_vx_u32m1(vdata, 1, vl);
-
-        vse32_v_u32m1(&data[i], vprocessed, vl); // Store processed data
-    }
-}
-
-
-3. Parallel Searches for Identical Keys
-Performing lookups for identical or grouped keys could potentially be parallelized. 
-The conceptual approach would involve identifying unique keys and their counts, then distributing the lookups. 
-
-// Conceptual pseudo-code for grouped key searches
-void groupedKeySearches(const uint32_t* uniqueKeys, size_t numUniqueKeys,
-                        HashTable* table, uint32_t* out) {
-    // Assuming a function that can load keys and perform parallel lookups, storing results in 'out'
-    for (size_t i = 0; i < numUniqueKeys; ++i) {
-        // For each unique key, perform the lookup operation (scalar, as direct vectorization is complex)
-        out[i] = search(table, uniqueKeys[i]);
-        // In a real scenario, we might leverage parallelism at a higher level, such as by distributing
-        // unique key searches across multiple vector lanes or cores, rather than vectorizing the lookup itself.
-    }
-}
-*/

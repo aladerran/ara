@@ -13,6 +13,10 @@
 #define NHASH 1000
 #define DATA_SIZE (NHASH * 4)
 
+#define NQUERY 500     // Number of queries
+#define NDATA 1000      // Number of data elements in the hash map
+
+
 static uint32_t simple_seed = 0;
 
 void seed_simple(uint32_t seed) {
@@ -142,6 +146,45 @@ int main() {
 
     printf("\n===================\n=   HASH QUERY   =\n===================\n");
     printf("------------------------------------------------------------\n------------------------------------------------------------\n");
-    
+
+    static uint32_t hash_target[NDATA], idx_target[NDATA], hash_query[NQUERY], out[NQUERY], out_rvv[NQUERY];
+
+    generate_data((int*)hash_target, NDATA);
+    generate_data((int*)idx_target, NDATA); 
+    generate_data((int*)hash_query, NQUERY);
+
+    printf("Testing hash_query_cpu with %d queries and %d data points\n", NQUERY, NDATA);
+    printf("------------------------------------------------------------\nRunning hash_query_cpu\n------------------------------------------------------------\n");
+
+    int64_t start_hash_query = get_cycle_count();
+    hash_query_cpu(hash_query, hash_target, idx_target, out, NDATA, NQUERY);
+    int64_t end_hash_query = get_cycle_count();
+
+    printf("hash_query_cpu CPU cycles: %ld\n\n", end_hash_query - start_hash_query);
+
+    printf("------------------------------------------------------------\nRunning hash_query_rvv\n------------------------------------------------------------\n");
+
+    int64_t start_hash_query_rvv = get_cycle_count();
+    hash_query_rvv(hash_query, hash_target, idx_target, out_rvv, NDATA, NQUERY);
+    int64_t end_hash_query_rvv = get_cycle_count();
+
+    printf("hash_query_rvv RVV cycles: %ld\n\n", end_hash_query_rvv - start_hash_query_rvv);
+
+    // Optionally print some of the output for verification
+    int error_query = 0;
+    printf("Sample Outputs:\n");
+    for (int i = 0; i < 100 && i < NQUERY; i++) { 
+        printf("Query %u -> Output %u\n", hash_query[i], out[i]);
+        printf("Query %u -> Output %u (rvv)\n", hash_query[i], out_rvv[i]);
+    }
+
+    if (error_query) {
+        printf("FAIL: hash query mismatch\n");
+    } else {
+        printf("SUCCESS: hash query match\n");
+    }
+
+    printf("------------------------------------------------------------\n");
+
     return 0;
 }
