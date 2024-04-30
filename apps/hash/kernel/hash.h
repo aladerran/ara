@@ -26,8 +26,8 @@ void rvv_kernel_hash_wrapper(const int N, const int K, const int *data,
 void kernel_hash_rvv(const int *idx, const int *kernel_offset,
                             uint32_t *out, const int N, const int K);
 
-void hash_query_cpu(const uint32_t* hash_query, const uint32_t* hash_target,
-                    const uint32_t* idx_target, uint32_t* out, const int n, const int n1);
+// void hash_query_cpu(const uint32_t* hash_query, const uint32_t* hash_target,
+//                     const uint32_t* idx_target, uint32_t* out, const int n, const int n1);
 
 void hash_query_rvv(const uint32_t* hash_query, const uint32_t* hash_target,
                     const uint32_t* idx_target, uint32_t* out, const int n, const int n1);

@@ -124,11 +124,6 @@ void rvv_kernel_hash_wrapper(const int N, const int K, const int *data,
 
         for (int k = 0; k < K; ++k) {
 
-            // Broadcast current kernel_offset values
-            vuint32m1_t vkx = vmv_v_x_u32m1(kernel_offset[k * 3], vl);
-            vuint32m1_t vky = vmv_v_x_u32m1(kernel_offset[k * 3 + 1], vl);
-            vuint32m1_t vkz = vmv_v_x_u32m1(kernel_offset[k * 3 + 2], vl);
-
             // Add the kernel_offset values to the data values
             vuint32m1_t vx = vadd_vx_u32m1(vle32_v_u32m1(tempX, vl), kernel_offset[k * 3], vl);
             vuint32m1_t vy = vadd_vx_u32m1(vle32_v_u32m1(tempY, vl), kernel_offset[k * 3 + 1], vl);
@@ -184,35 +179,40 @@ void kernel_hash_rvv(const int *idx, const int *kernel_offset,
 
 #include "hashmap.h"
 
-void hash_query_cpu(const uint32_t* hash_query, const uint32_t* hash_target,
-                    const uint32_t* idx_target, uint32_t* out, const int n, const int n1) {
-    HashMap hashmap;
-    HashInit(&hashmap); 
+// void hash_query_cpu(const uint32_t* hash_query, const uint32_t* hash_target,
+//                     const uint32_t* idx_target, uint32_t* out, const int n, const int n1) {
+//     HashMap hashmap;
+//     HashInit(&hashmap); 
 
-    for (int i = 0; i < n; i++) {
-        HashAdd(&hashmap, hash_target[i], idx_target[i] + 1);
-    }
+//     for (int i = 0; i < n; i++) {
+//         HashAdd(&hashmap, hash_target[i], idx_target[i] + 1);
+//     }
 
-    for (int i = 0; i < n1; i++) {
-        out[i] = HashGetValue(&hashmap, hash_query[i]);
-    }
+//     for (int i = 0; i < n1; i++) {
+//         out[i] = HashGetValue(&hashmap, hash_query[i]);
+//     }
 
-}
+// }
 
 void hash_query_rvv(const uint32_t* hash_query, const uint32_t* hash_target,
-                    const uint32_t* idx_target, uint32_t* out, const int n, const int n1) {
-    HashMap HashMap_rvv;
-    HashInit_rvv(&HashMap_rvv, n);
-    size_t vlmax = vsetvlmax_e32m1();
+                    const uint32_t* idx_target, uint32_t* out, const int n, const int n1){
 
-    for (size_t i = 0; i < n; i+=vlmax) {
-        size_t vl = vsetvl_e32m1(n - i);
-        HashAdd_rvv(&HashMap_rvv, hash_target + i, idx_target + i, vl);
+    HashTable ht;
+    hash_table_init(&ht);
+
+    insert_batch(&ht, hash_target, idx_target, n);
+
+    // print some of the hash target
+    for (int i = 0; i < n; i++) {
+        printf("target_key: %d, value: %d\n", hash_target[i], idx_target[i]);
     }
 
-    for (size_t i = 0; i < n1; i+=vlmax) {
-        size_t vl = vsetvl_e32m1(n1 - i);
-        HashGet_rvv(&HashMap_rvv, hash_query + i, vl, out + i);
+    // print some of the hash table
+    for (int i = 0; i < 1024; i++) {
+        printf("tb_key: %d, value: %d\n", ht.keys[i], ht.payloads[i]);
     }
+
+    // find_batch(&ht, hash_query, out, n1);
+
 }
 
