@@ -40,7 +40,7 @@ void gather_rvv(const int n_k, const int n_in, const int c,
     //     vbool32_t mask = vmnot_m_b32(vmslt_vx_i32m1_b32(vindex, 0, vl), vl);
 
     //     // Calculate the number of valid indices
-    //     unsigned long vl_valid = vpopc_m_b32(mask, vl); // Clang seems not to support Vector mask population count functions...
+    //     unsigned long vl_valid = vcpop_m_b32(mask, vl);
 
     //     // Cast vl_valid to size_t
     //     vl_valid = (size_t)vl_valid;
@@ -67,6 +67,8 @@ void gather_rvv(const int n_k, const int n_in, const int c,
     //         }
     //     }
     // }
+
+    // aladerran: for comparison
 
     for (int i = 0; i < n_k; i++) {
         int in_pos = kmap[2 * i + transpose];
@@ -124,7 +126,7 @@ void scatter_rvv(const int n_k, const int n_in, const int c,
         
     //     vbool32_t mask = vmnot_m_b32(vmslt_vx_i32m1_b32(vindex, 0, vl), vl);
 
-    //     unsigned long vl_valid = vpopc_m_b32(mask, vl);
+    //     unsigned long vl_valid = vcpop_m_b32(mask, vl);
 
     //     vl_valid = (size_t)vl_valid;
 

@@ -27,7 +27,7 @@
 
 /*=========================================================================================*/
 
-#define HASH_TABLE_SIZE 1024
+#define HASH_TABLE_SIZE 2048
 #define EMPTY_KEY 0xFFFFFFFF // Representation of an empty key slot
 #define HASH_FACTOR 0x9e3779b9 // Random prime number
 #define W 128 // Vector width
@@ -39,6 +39,6 @@ typedef struct {
 
 void hash_table_init(HashTable* ht);
 void insert_batch(HashTable* ht, const uint32_t* keys, const uint32_t* payloads, size_t num_keys);
-// void find_batch(HashTable* ht, const uint32_t* keys, uint32_t* out, size_t num_keys);
+void find_batch(HashTable* ht, const uint32_t* keys, uint32_t* out, size_t num_keys);
 
 #endif // HASH_MAP_H

@@ -10,29 +10,19 @@
 #include "printf.h"
 #endif
 
-#define NHASH 150
+#define NHASH 1024
 #define DATA_SIZE (NHASH * 4)
 
-#define KERNEL_SIZE 3
+#define KERNEL_SIZE 1
 
 #define NDATA NHASH
 #define NQUERY NHASH * KERNEL_SIZE
 
 
-static uint32_t simple_seed = 0;
-
-void seed_simple(uint32_t seed) {
-    simple_seed = seed;
-}
-
-uint32_t simple_rand() {
-    simple_seed = simple_seed * 1103515245 + 12345;
-    return (simple_seed / 65536) % 32768;
-}
 
 void generate_data(int *data, int N) {
     for (int i = 0; i < N; i++) {
-        data[i] = simple_rand() % 100;
+        data[i] = i + 1;
     }
 }
 
@@ -53,7 +43,6 @@ int main() {
 
     int data[DATA_SIZE];
 
-    seed_simple(1234);
     generate_data(data, DATA_SIZE);
 
     printf("\n==========\n=  HASH  =\n==========\n");
@@ -64,7 +53,7 @@ int main() {
     printf("------------------------------------------------------------\nRunning CPU Hash\n------------------------------------------------------------\n");
 
     uint32_t result_cpu[NHASH];
-    // uint32_t result_ara[NHASH];
+    uint32_t result_ara[NHASH];
     
     int64_t start_cpu = get_cycle_count();
     hash_cpu(data, result_cpu, NHASH);
@@ -72,28 +61,28 @@ int main() {
 
     printf(" CPU cycles: %ld\n\n", end_cpu - start_cpu);
 
-    // printf("------------------------------------------------------------\nRunning Ara Hash\n------------------------------------------------------------\n");
+    printf("------------------------------------------------------------\nRunning Ara Hash\n------------------------------------------------------------\n");
     
-    // int64_t start_ara = get_cycle_count();
-    // hash_rvv(data, result_ara, NHASH);
-    // int64_t end_ara =  get_cycle_count();
+    int64_t start_ara = get_cycle_count();
+    hash_rvv(data, result_ara, NHASH);
+    int64_t end_ara =  get_cycle_count();
 
-    // printf(" RVV cycles: %ld\n\n", end_ara - start_ara);
+    printf(" RVV cycles: %ld\n\n", end_ara - start_ara);
 
-    // int error = 0;
-    // for (int i = 0; i < NHASH; i++) {
-    //     if (result_cpu[i] != result_ara[i]) {
-    //         error = 1;
-    //         printf("ERROR: hash mismatch starts at index %d: %u != %u\n", i, result_cpu[i], result_ara[i]);
-    //         break;
-    //     }
-    // }
+    int error = 0;
+    for (int i = 0; i < NHASH; i++) {
+        if (result_cpu[i] != result_ara[i]) {
+            error = 1;
+            printf("ERROR: hash mismatch starts at index %d: %u != %u\n", i, result_cpu[i], result_ara[i]);
+            break;
+        }
+    }
 
-    // if (error) {
-    //     printf("FAIL: hash mismatch\n");
-    // } else {
-    //     printf("SUCCESS: hash match\n");
-    // }
+    if (error) {
+        printf("FAIL: hash mismatch\n");
+    } else {
+        printf("SUCCESS: hash match\n");
+    }
 
 
     printf("\n===================\n=  KERNEL HASH  =\n===================\n");
@@ -102,14 +91,10 @@ int main() {
 
     int kenel_volume = KERNEL_SIZE;
     int kernel_offset[kenel_volume];
-    uint32_t result_cpu_kernel[NHASH];
-    // uint32_t result_ara_kernel[NHASH];
+    uint32_t result_cpu_kernel[NHASH * KERNEL_SIZE];
+    uint32_t result_ara_kernel[NHASH * KERNEL_SIZE];
 
-    seed_simple(1234);
     generate_data(kernel_offset, kenel_volume);
-
-    // int data_rvv[DATA_SIZE];
-    // int kernel_offset_rvv[kenel_volume];
 
     printf("------------------------------------------------------------\nRunning CPU Kernel Hash\n------------------------------------------------------------\n");
 
@@ -117,34 +102,30 @@ int main() {
     kernel_hash_cpu(data, kernel_offset, result_cpu_kernel, NHASH, kenel_volume);
     int64_t end_cpu_kernel = get_cycle_count();
 
-    // store the result of the CPU kernel hash into a place that cannot be modified
-    // const uint32_t result_cpu_kernel_const[NHASH];
-    // memcpy((void*)result_cpu_kernel_const, result_cpu_kernel, sizeof(result_cpu_kernel));    
-
     printf(" CPU cycles: %ld\n\n", end_cpu_kernel - start_cpu_kernel);
 
-    // printf("------------------------------------------------------------\nRunning Ara Kernel Hash\n------------------------------------------------------------\n");
+    printf("------------------------------------------------------------\nRunning Ara Kernel Hash\n------------------------------------------------------------\n");
 
-    // int64_t start_ara_kernel = get_cycle_count();
-    // kernel_hash_rvv(data, kernel_offset, result_ara_kernel, NHASH, kenel_volume);
-    // int64_t end_ara_kernel = get_cycle_count();
+    int64_t start_ara_kernel = get_cycle_count();
+    kernel_hash_rvv(data, kernel_offset, result_ara_kernel, NHASH, kenel_volume);
+    int64_t end_ara_kernel = get_cycle_count();
 
-    // printf(" RVV cycles: %ld\n\n", end_ara_kernel - start_ara_kernel);
+    printf(" RVV cycles: %ld\n\n", end_ara_kernel - start_ara_kernel);
 
-    // int error_kernel = 0;
-    // for (int i = 0; i < NHASH; i++) {
-    //     if (result_cpu_kernel_const[i] != result_ara_kernel[i]) {
-    //         error_kernel = 1;
-    //         printf("ERROR: hash mismatch starts at index %d: %u != %u\n", i, result_cpu_kernel_const[i], result_ara_kernel[i]);
-    //         break;
-    //     }
-    // }
+    int error_kernel = 0;
+    for (int i = 0; i < NHASH; i++) {
+        if (result_cpu_kernel[i] != result_ara_kernel[i]) {
+            error_kernel = 1;
+            printf("ERROR: hash mismatch starts at index %d: %u != %u\n", i, result_cpu_kernel[i], result_ara_kernel[i]);
+            break;
+        }
+    }
 
-    // if (error_kernel) {
-    //     printf("FAIL: kernel hash mismatch\n");
-    // } else {
-    //     printf("SUCCESS: kernel hash match\n");
-    // }
+    if (error_kernel) {
+        printf("FAIL: kernel hash mismatch\n");
+    } else {
+        printf("SUCCESS: kernel hash match\n");
+    }
 
     printf("\n===================\n=   HASH QUERY   =\n===================\n");
     printf("------------------------------------------------------------\n------------------------------------------------------------\n");

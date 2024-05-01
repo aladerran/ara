@@ -48,19 +48,19 @@ void hash_table_init(HashTable* ht) {
 
 
 // #define DEBUG
-// #define NO_CONFLICT
+// #define DEBUG_PRINT
 
 void insert_batch(HashTable* ht, const uint32_t* keys, const uint32_t* payloads, size_t num_keys) {
 
     size_t vl = W;
 
-    #ifdef DEBUG
+    #ifdef DEBUG_PRINT
     uint32_t debug[W];
     #endif
 
     uint32_t unique_ids[W];
     for (size_t lane = 0; lane < W; ++lane) {
-        unique_ids[lane] = lane; // Unique identifier for conflict detection
+        unique_ids[lane] = lane + 1; // Unique identifier for conflict detection
     }
 
     vuint32m1_t unique_ids_v = vle32_v_u32m1(unique_ids, vl); // Load unique lane identifiers
@@ -104,39 +104,43 @@ void insert_batch(HashTable* ht, const uint32_t* keys, const uint32_t* payloads,
         vuint32m1_t hash = vmul_vx_u32m1(k, HASH_FACTOR, vl);
         vuint32m1_t h = vremu_vx_u32m1(hash, HASH_TABLE_SIZE, vl);
 
-        #ifdef DEBUG
+        #ifdef DEBUG_PRINT
         vse32_v_u32m1(debug, h, vl);
         for (int j = 0; j < W; j++) {
             printf("debug: h[%d] = %d\n", j, debug[j]);
         }
         #endif
 
+        #ifdef DEBUG
         printf("debug:fix overflow\n");
+        #endif
 
         // Fix overflows for h
         h = vadd_vv_u32m1(h, offset, vl); // Add offset to h
         vbool32_t overflow_mask = vmsgtu_vx_u32m1_b32(h, HASH_TABLE_SIZE, vl);
         h = vsub_vv_u32m1_m(overflow_mask, h, h, vhtsize, vl);
+        vuint32m1_t h_with_offset = vmul_vv_u32m1(h, element_size, vl); // aladerran: Damn... we need to mutiply 4 (bytes) w. the index
 
-        #ifdef DEBUG
+        #ifdef DEBUG_PRINT
         vse32_v_u32m1(debug, h, vl);
         for (int j = 0; j < W; j++) {
             printf("debug: h[%d] = %d\n", j, debug[j]);
         }
         #endif
 
-        vuint32m1_t vkeys = vle32_v_u32m1(ht->keys, vl);
-        vuint32m1_t table_keys = vrgather_vv_u32m1_m(mask, maskedoff, vkeys, h, vl); // not sure what to do w. maskedoff
-
+        #ifdef DEBUG
         printf("debug:update mask\n");
+        #endif
 
         // update mask = (table_keys == EMPTY_KEY)
+        vuint32m1_t table_keys = vluxei32_v_u32m1(ht->keys, h_with_offset, vl);
         mask = vmseq_vv_u32m1_b32(table_keys, vempty, vl);
 
-        #ifndef NO_CONFLICT
-        printf("debug:conflict detection\n");
-
         #ifdef DEBUG
+        printf("debug:conflict detection\n");
+        #endif
+
+        #ifdef DEBUG_PRINT
         printf("Before conflict detection\n");
         for (int j = 0; j < W; j++) {
             printf("ht->keys[%d] = %d\n", j, ht->keys[j]);
@@ -145,43 +149,30 @@ void insert_batch(HashTable* ht, const uint32_t* keys, const uint32_t* payloads,
 
         // Detect conflicts and resolve them
         // Scatter unique identifiers to the hash table for conflict detection
-        vuint32m1_t h_with_offset = vmul_vv_u32m1(h, element_size, vl); // aladerran: Damn... we need to mutiply 4 (bytes) w. the index
         vsuxei32_v_u32m1_m(mask, ht->keys, h_with_offset, unique_ids_v, vl); // Use mask to scatter only where it's safe
-        
-        #ifdef DEBUG
+        #ifdef DEBUG_PRINT
         printf("In conflict detection\n");
         for (int j = 0; j < W; j++) {
             printf("ht->keys[%d] = %d\n", j, ht->keys[j]);
         }
         #endif
-
         // Gather keys again to check for conflicts
-        vuint32m1_t post_scatter_keys = vrgather_vv_u32m1(vkeys, h_with_offset, vl); 
+        vuint32m1_t post_scatter_keys = vluxei32_v_u32m1(ht->keys, h_with_offset, vl);
+        vbool32_t safte_mask = vmseq_vv_u32m1_b32(post_scatter_keys, unique_ids_v, vl); 
+        mask = vmand_mm_b32(mask, safte_mask, vl);
 
-        // Generate conflict mask where gathered keys do not match the unique identifiers
-        vbool32_t conflict_mask = vmseq_vv_u32m1_b32(post_scatter_keys, unique_ids_v, vl); 
 
-        // Invert the conflict mask to find lanes without conflicts. Since rvv intrinsics do not have
-        // vmnot_m_b32, we must use vmxor with a mask of all true to invert the bits.
-        vbool32_t m_all = vmset_m_b32(vl); // Mask of all true bits
-        vbool32_t safe_to_write_mask = vmxor_mm_b32(conflict_mask, m_all, vl);
-
+        #ifdef DEBUG
         printf("debug:scatter keys and payloads\n");
-
-        // Scatter keys and payloads to the hash table where there are no conflicts
-        vsuxei32_v_u32m1_m(safe_to_write_mask, ht->keys, h_with_offset, k, vl);
-        vsuxei32_v_u32m1_m(safe_to_write_mask, ht->payloads, h_with_offset, v, vl);
-
         #endif
 
-        #ifdef NO_CONFLICT
         // Scatter keys and payloads to the hash table where there are no conflicts
-        vuint32m1_t h_with_offset = vmul_vv_u32m1(h, element_size, vl);
         vsuxei32_v_u32m1_m(mask, ht->keys, h_with_offset, k, vl);
         vsuxei32_v_u32m1_m(mask, ht->payloads, h_with_offset, v, vl);
-        #endif
 
+        #ifdef DEBUG
         printf("debug:increment/reset offsets\n");
+        #endif
 
         // Increment or reset offsets w.r.t. mask
         offset = vadd_vx_u32m1_m(mask, offset, offset, 1, vl);
@@ -190,3 +181,42 @@ void insert_batch(HashTable* ht, const uint32_t* keys, const uint32_t* payloads,
 
 }
 
+// void find_batch(HashTable* ht, const uint32_t* keys, uint32_t* out, size_t num_keys) {
+
+//     size_t vl = W;
+//     size_t i = 0;
+
+//     vbool32_t mask_all = vmset_m_b32(vl);
+//     vuint32m1_t empty_key_vec = vmv_v_x_u32m1(EMPTY_KEY, vl);
+//     vuint32m1_t offset = vmv_v_x_u32m1(0, vl);
+
+//     while (i + W <= num_keys) {
+//         vl = vsetvl_e32m1(num_keys - i);
+
+//         vuint32m1_t k = vle32_v_u32m1(&keys[i], vl);
+//         vuint32m1_t hash = vmul_vx_u32m1(k, HASH_FACTOR, vl);
+//         vuint32m1_t index = vremu_vx_u32m1(hash, HASH_TABLE_SIZE, vl);
+
+//         vbool32_t mask = mask_all;
+//         vuint32m1_t current_index;
+
+//         while (vcpop_m_b32(mask, vl) != 0) {
+//             current_index = vadd_vv_u32m1(index, offset, vl);
+//             vuint32m1_t vkeys = vle32_v_u32m1(ht->keys, vl);
+//             vuint32m1_t table_keys = vrgather_vv_u32m1(vkeys, current_index, vl);
+
+//             vbool32_t match_mask = vmseq_vv_u32m1(table_keys, k, vl);
+//             vbool32_t empty_mask = vmseq_vv_u32m1(table_keys, empty_key_vec, vl);
+
+//             // Combine matches and empties to update the mask
+//             mask = vmxor_vv_b32(match_mask, empty_mask, vl);
+//             // Save results
+//             vsuxei32_v_u32m1_m(match_mask, out, current_index, k, vl);
+
+//             // Prepare for the next iteration
+//             offset = vadd_vx_u32m1(offset, vmv_v_x_u32m1(1, vl), vl);
+//         }
+
+//         i += vl;
+//     }
+// }

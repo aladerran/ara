@@ -11,9 +11,9 @@
 #include "printf.h"
 #endif
 
-#define NGATHER 1
-#define DATA_SIZE 100
-#define CHANNELS 64
+#define NGATHER 30
+#define DATA_SIZE 128
+#define CHANNELS 128
 
 
 int main() {

@@ -202,15 +202,15 @@ void hash_query_rvv(const uint32_t* hash_query, const uint32_t* hash_target,
 
     insert_batch(&ht, hash_target, idx_target, n);
 
-    // print some of the hash target
-    for (int i = 0; i < n; i++) {
-        printf("target_key: %d, value: %d\n", hash_target[i], idx_target[i]);
-    }
+    // // print some of the hash target
+    // for (int i = 0; i < n; i++) {
+    //     printf("target_key: %d, value: %d\n", hash_target[i], idx_target[i]);
+    // }
 
-    // print some of the hash table
-    for (int i = 0; i < 1024; i++) {
-        printf("tb_key: %d, value: %d\n", ht.keys[i], ht.payloads[i]);
-    }
+    // // print some of the hash table
+    // for (int i = 0; i < HASH_TABLE_SIZE; i++) {
+    //     printf("tb_key: %d, value: %d\n", ht.keys[i], ht.payloads[i]);
+    // }
 
     // find_batch(&ht, hash_query, out, n1);
 
