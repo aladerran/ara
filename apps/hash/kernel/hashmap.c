@@ -181,42 +181,46 @@ void insert_batch(HashTable* ht, const uint32_t* keys, const uint32_t* payloads,
 
 }
 
-// void find_batch(HashTable* ht, const uint32_t* keys, uint32_t* out, size_t num_keys) {
 
-//     size_t vl = W;
-//     size_t i = 0;
+void find_batch(HashTable* ht, const uint32_t* keys, uint32_t* out, size_t num_keys) {
+    size_t vl = W;
+    size_t i = 0;
+    size_t out_index = 0;  // Output index for storing results
 
-//     vbool32_t mask_all = vmset_m_b32(vl);
-//     vuint32m1_t empty_key_vec = vmv_v_x_u32m1(EMPTY_KEY, vl);
-//     vuint32m1_t offset = vmv_v_x_u32m1(0, vl);
+    vbool32_t mask_all = vmset_m_b32(vl);
+    vuint32m1_t empty_key_vec = vmv_v_x_u32m1(EMPTY_KEY, vl);
+    vuint32m1_t element_size = vmv_v_x_u32m1(4, vl);
 
-//     while (i + W <= num_keys) {
-//         vl = vsetvl_e32m1(num_keys - i);
+    while (i < num_keys) {
+        vl = vsetvl_e32m1(num_keys - i);
+        vuint32m1_t k = vle32_v_u32m1(&keys[i], vl);
+        vuint32m1_t hash = vmul_vx_u32m1(k, HASH_FACTOR, vl);
+        vuint32m1_t index = vremu_vx_u32m1(hash, HASH_TABLE_SIZE, vl);
+        vuint32m1_t offset = vmv_v_x_u32m1(0, vl);
 
-//         vuint32m1_t k = vle32_v_u32m1(&keys[i], vl);
-//         vuint32m1_t hash = vmul_vx_u32m1(k, HASH_FACTOR, vl);
-//         vuint32m1_t index = vremu_vx_u32m1(hash, HASH_TABLE_SIZE, vl);
+        vbool32_t mask = mask_all;
 
-//         vbool32_t mask = mask_all;
-//         vuint32m1_t current_index;
+        while (vcpop_m_b32(mask, vl) != 0) {
+            vuint32m1_t current_index = vadd_vv_u32m1(index, offset, vl);
+            vuint32m1_t current_index_with_offset = vmul_vv_u32m1(current_index, element_size, vl);
+            vuint32m1_t table_keys = vluxei32_v_u32m1(ht->keys, current_index_with_offset, vl);
 
-//         while (vcpop_m_b32(mask, vl) != 0) {
-//             current_index = vadd_vv_u32m1(index, offset, vl);
-//             vuint32m1_t vkeys = vle32_v_u32m1(ht->keys, vl);
-//             vuint32m1_t table_keys = vrgather_vv_u32m1(vkeys, current_index, vl);
+            vbool32_t match_mask = vmseq_vv_u32m1_b32(table_keys, k, vl);
+            vbool32_t empty_mask = vmseq_vv_u32m1_b32(table_keys, empty_key_vec, vl);
 
-//             vbool32_t match_mask = vmseq_vv_u32m1(table_keys, k, vl);
-//             vbool32_t empty_mask = vmseq_vv_u32m1(table_keys, empty_key_vec, vl);
+            // Update mask to continue where no match or empty spot found
+            mask = vmandn_mm_b32(mask, vmor_mm_b32(match_mask, empty_mask, vl), vl);
 
-//             // Combine matches and empties to update the mask
-//             mask = vmxor_vv_b32(match_mask, empty_mask, vl);
-//             // Save results
-//             vsuxei32_v_u32m1_m(match_mask, out, current_index, k, vl);
+            // Store keys where matches are found
+            vse32_v_u32m1_m(match_mask, &out[out_index], k, vl);
 
-//             // Prepare for the next iteration
-//             offset = vadd_vx_u32m1(offset, vmv_v_x_u32m1(1, vl), vl);
-//         }
+            // Update out_index based on number of matches found
+            out_index += vcpop_m_b32(match_mask, vl);
 
-//         i += vl;
-//     }
-// }
+            // Increment offset for next probe
+            offset = vadd_vx_u32m1_m(mask, offset, offset, 1, vl);
+        }
+
+        i += vl;
+    }
+}

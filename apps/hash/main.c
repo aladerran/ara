@@ -10,10 +10,10 @@
 #include "printf.h"
 #endif
 
-#define NHASH 1024
+#define NHASH 512
 #define DATA_SIZE (NHASH * 4)
 
-#define KERNEL_SIZE 1
+#define KERNEL_SIZE 8
 
 #define NDATA NHASH
 #define NQUERY NHASH * KERNEL_SIZE
